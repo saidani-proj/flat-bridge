@@ -2,6 +2,20 @@
 
 **flat-bridge** is a Bash script that generates a wrapper script to run a Flatpak package via `flatpak run`.
 
+## Installation
+
+### From .deb package (Debian/Ubuntu)
+
+```bash
+sudo dpkg -i dist/flat-bridge_1.0.0_all.deb
+```
+
+### From source
+
+```bash
+sudo install -m 755 src/flat-bridge /usr/bin/
+```
+
 ## Usage
 
 ```bash
