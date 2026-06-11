@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+usage() {
+    cat <<EOF
+Usage: flat-bridge [options] <name>
+
+Create a bridge script that runs a flatpak package, or remove one.
+
+Options:
+    --user          Install bridge in ~/.local/bin (default)
+    --system        Install bridge in /usr/local/bin
+    -d, --bin-dir   Custom binary directory (overrides --user/--system)
+    -n, --name      Name of the bridge script (default: same as package name)
+    -r, --remove    Remove the bridge script (argument is the bridge name)
+    -h, --help      Show this help message
+EOF
+    exit 0
+}
+
+MODE="user"
+PACKAGE=""
+NAME=""
+BIN_DIR_OVERRIDE=""
+REMOVE=0
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            usage
+            ;;
+        --user)
+            MODE="user"
+            shift
+            ;;
+        --system)
+            MODE="system"
+            shift
+            ;;
+        -d|--bin-dir)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --bin-dir requires an argument"
+                exit 1
+            fi
+            BIN_DIR_OVERRIDE="$2"
+            shift 2
+            ;;
+        -r|--remove)
+            REMOVE=1
+            shift
+            ;;
+        -n|--name)
+            if [[ $REMOVE -eq 1 ]]; then
+                echo "Error: --name is not supported with --remove (use positional argument)"
+                exit 1
+            fi
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --name requires an argument"
+                exit 1
+            fi
+            NAME="$2"
+            shift 2
+            ;;
+        -*)
+            echo "Unknown option: $1"
+            usage
+            ;;
+        *)
+            if [[ $REMOVE -eq 1 ]]; then
+                if [[ -n "$NAME" ]]; then
+                    echo "Error: multiple bridge names provided"
+                    exit 1
+                fi
+                NAME="$1"
+            else
+                if [[ -n "$PACKAGE" ]]; then
+                    echo "Error: multiple package names provided"
+                    exit 1
+                fi
+                PACKAGE="$1"
+            fi
+            shift
+            ;;
+    esac
+done
+
+if [[ $REMOVE -eq 1 ]]; then
+    if [[ -z "$NAME" ]]; then
+        echo "Error: bridge name is required"
+        usage
+    fi
+else
+    if [[ -z "$PACKAGE" ]]; then
+        echo "Error: package name is required"
+        usage
+    fi
+fi
+
+if [[ -n "$BIN_DIR_OVERRIDE" ]]; then
+    BIN_DIR="$BIN_DIR_OVERRIDE"
+else
+    case "$MODE" in
+        user)
+            BIN_DIR="$HOME/.local/bin"
+            ;;
+        system)
+            BIN_DIR="/usr/local/bin"
+            ;;
+    esac
+fi
+
+BRIDGE_NAME="${NAME:-$PACKAGE}"
+BRIDGE_PATH="$BIN_DIR/$BRIDGE_NAME"
+
+if [[ $REMOVE -eq 1 ]]; then
+    if [[ -f "$BRIDGE_PATH" ]]; then
+        if ! rm -f "$BRIDGE_PATH" 2>/dev/null; then
+            echo "Error: could not remove bridge at $BRIDGE_PATH (permission denied)"
+            exit 1
+        fi
+        echo "Bridge removed at $BRIDGE_PATH"
+    else
+        echo "Error: no bridge found at $BRIDGE_PATH"
+        exit 1
+    fi
+else
+    mkdir -p "$BIN_DIR"
+
+    cat > "$BRIDGE_PATH" <<SCRIPT
+#!/usr/bin/env bash
+for arg in "\$@"; do
+    if [[ "\$arg" == "--" ]]; then
+        sep=1
+        break
+    fi
+done
+
+if [[ -n "\$sep" ]]; then
+    opts=()
+    for arg in "\$@"; do
+        shift
+        if [[ "\$arg" == "--" ]]; then
+            break
+        fi
+        opts+=("\$arg")
+    done
+    exec flatpak run "\${opts[@]}" "$PACKAGE" "\$@"
+else
+    exec flatpak run "$PACKAGE" "\$@"
+fi
+SCRIPT
+
+    chmod +x "$BRIDGE_PATH"
+
+    echo "Bridge created at $BRIDGE_PATH"
+fi

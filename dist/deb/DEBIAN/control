@@ -1,0 +1,12 @@
+Package: flat-bridge
+Version: 1.0.0
+Section: utils
+Priority: optional
+Architecture: all
+Depends: bash (>= 4.0), flatpak
+Maintainer: Your Name <you@example.com>
+Description: Generate wrapper scripts for Flatpak packages
+ flat-bridge is a Bash script that generates a lightweight
+ wrapper script to run a Flatpak package via flatpak run.
+ It supports custom bridge names, custom binary directories,
+ system-wide installs, and bridge removal.
